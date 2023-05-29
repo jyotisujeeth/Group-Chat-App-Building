@@ -1,30 +1,30 @@
-const path = require('path');
-
 const express = require('express');
 
+const messageController = require('../controllers/message');
+const userAuth = require('../middleware/auth');
 
 const router = express.Router();
 
-const jwt = require('jsonwebtoken')
+router.get('/', userAuth.authenticate, messageController.getMessage);
 
-const userAuth=require('../middleware/auth');
-const bodyParser = require('body-parser');
-router.use(bodyParser.json())
-router.use(bodyParser.urlencoded({ extended: true }));
-const Message = require('../models/message');
-const User = require('../models/user');
-const messageController = require('../controllers/message');
+router.post('/', userAuth.authenticate,  messageController.postMessage);
 
-router.post("/sendmsg/:groupId",userAuth.authenticate,messageController.sendMessage)
+router.post('/createGroup', userAuth.authenticate, messageController.postGroup);
 
-router.get("/getmessages",userAuth.authenticate,messageController.getMessages)
+router.get('/allGroup', userAuth.authenticate, messageController.getAllG);
 
+router.get('/getInvite', userAuth.authenticate, messageController.getInvite);
 
-router.get("/getusers",userAuth.authenticate,messageController.getUsers)
+router.get('/joinGroup', userAuth.authenticate, messageController.getJoinGroup);
 
+router.get('/addUser',userAuth.authenticate, messageController.getAddUser);
 
-router.get("/getgroupmessages/:groupId",userAuth.authenticate,messageController.getGroupMessages)
+router.get('/allUsers', userAuth.authenticate, messageController.getAllU);
 
+router.get('/removeU', userAuth.authenticate, messageController.getRemU);
 
+router.get('/makeA', userAuth.authenticate, messageController.getMakeA);
 
-module.exports = router;
+router.post('/saveFile', userAuth.authenticate, messageController.postSaveFile);
+
+module.exports=router;

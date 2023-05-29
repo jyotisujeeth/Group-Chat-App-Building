@@ -1,68 +1,82 @@
-const express = require('express');
 const path = require('path');
-const bcrypt = require('bcrypt')
-const jwt = require('jsonwebtoken')
-var app=express();
-var cors=require('cors');
-const sequelize = require('./util/database');
-//trying git ignore
-// const helmet=require('helmet')
-// const compression = require('compression')
-// const morgan = require('morgan')
-const User = require('./models/user');
-const Group = require('./models/group');
-const Message = require('./models/message');
-const Usergroup = require('./models/usergroup');
-
-const Forgotpassword =require('./models/forgotpassword');
-app.use(cors());
-
+const fs = require('fs');
+const express = require('express');
+const cors = require('cors');
 const bodyParser = require('body-parser');
-app.use(bodyParser.json())
-app.use(bodyParser.urlencoded({ extended: true }));
+const helmet = require('helmet');
+const morgan = require('morgan');
 
+const dotenv = require('dotenv');
+dotenv.config();
 
+const User = require('./models/user');
+const Chat = require('./models/chat');
+const Group = require('./models/group');
+const Groupmembers = require('./models/gmember');
 
-const msgRoutes = require('./routes/message');
-app.use('/message', msgRoutes);
+const userRoutes = require('./routes/user.js');
+const messageRoutes = require('./routes/message');
 
-const userRoutes = require('./routes/user');
+const sequelize = require('./util/database');
+
+const accessLogStream = fs.createWriteStream(
+    path.join(__dirname, 'access.log'),
+    { flags: 'a' }
+);
+
+const app = express();
+const httpServer = require("http").createServer(app);
+const socketio = require("socket.io")
+const io = socketio(httpServer);
+
+app.use(cors({
+    origin : '*',
+    // methods: ['GET', 'POST']
+}));
+app.use(helmet());
+app.use(morgan('combined', { stream: accessLogStream }));
+app.use(bodyParser.json());
+
 app.use('/user', userRoutes);
-
-const groupRoutes = require('./routes/group')
-app.use('/group', groupRoutes)
-
-// const premiumFeatureRoutes = require('./routes/premiumFeature')
-// app.use('/premium', premiumFeatureRoutes)
-const passwordRoutes = require('./routes/password')
-app.use('/password', passwordRoutes)
+app.use('/message', messageRoutes);
 
 
-const mediaRoutes = require('./routes/media')
-app.use('/media', mediaRoutes)
 
-app.use((req, res, next) => {
-    res.status(404).sendFile(path.join(__dirname, 'views', '404.html'));
+io.on('connection',socket=>{
+    console.log('user connected');
+    socket.on('send-chat-message', message => {
+        socket.broadcast.emit('chat-message', message)
+    });
 });
+io.on('disconnect', function(){
+    console.log('user disconnected');
+  });
+
+User.hasMany(Chat);
+Chat.belongsTo(User);
+
+User.hasMany(Group);
+Group.belongsTo(User);
+
+Group.hasMany(Chat);
+Chat.belongsTo(Group);
+
+User.hasMany(Groupmembers);
+Groupmembers.belongsTo(User);
+
+Group.hasMany(Groupmembers);
+Groupmembers.belongsTo(Group);
 
 
-
-
-User.hasMany(Message)
-Message.belongsTo(User)
-
-Group.belongsToMany(User,{through:Usergroup})
-User.belongsToMany(Group,{through:Usergroup})
-
-Group.hasMany(Message)
-Message.belongsTo(Group)
-
-sequelize.sync()
-.then(result=>{
-    console.log(result);
-})
-.catch(err=>{
-    console.log(err);
-})
-
-app.listen(5000);
+sequelize
+    .sync()
+    // .sync({ force: true })
+    .then(res => {
+        app.listen(process.env.PORT_DEFAULT, (err) => {
+            if (err) console.log(err);
+            console.log(`server is listing to :${process.env.PORT}`)
+        });
+    })
+    .catch(err => {
+        console.log(err);
+    });

@@ -1,69 +1,61 @@
-const path = require('path');
-const express = require('express');
-const router = express.Router();
-const bcrypt = require('bcrypt')
-const jwt = require('jsonwebtoken')
-const bodyParser = require('body-parser');
-router.use(bodyParser.json())
-router.use(bodyParser.urlencoded({ extended: true }));
-require("dotenv").config();
-
-
 const User = require('../models/user');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
+exports.postUser = async (req, res, next) => {
+    try {
+        const {name,email,password,number} = req.body;
 
-exports.postSignup=async (req,res,next)=>{
-    try{
-        var name=req.body.name;
-        var email=req.body.email;
-        var phone=req.body.phone;
-        var password=req.body.password;
-        const saltrounds = 10;
-        bcrypt.hash(password, saltrounds, async (err, hash) => {
-            console.log(err)
-            await User.create({ name, email, password: hash , phone})
-            res.status(201).json({message: 'Successfuly create new user'})
-        })
+        let userExist = await User.findAll({where: {email}});
+        if(!userExist.length){
+            userExist = await User.findAll({where: {number}});
+        }
+        
+        if(userExist && userExist.length){
+            res.status(207).json({ message: 'User already exist, Please Login' });
+        } else {
+            bcrypt.hash(password, 10, async (err, hash) => {
+                if(err) console.log(err);
+                await User.create({ name, email, number, password: hash });
+                return res.status(201).json({ message: 'User Signup successful' });
+            });
+        }
+    } catch (err) {
+        console.log(err);
+        return res.status(500).json({ error: err });
     }
-    catch(err){
-        res.status(500).json({
-            error:"Email Aldready exists"
-        })
-    }
+};
+
+function generateAccessToken(id,name){
+    return jwt.sign({id,name},process.env.TOKEN_SECRET);
 }
 
+exports.postLogin = async (req, res, next) => {
+    try {
+        const email = req.body.email;
+        const loginPassword = req.body.password;
 
-
-const generateAccessToken = (id, name) => {
-    return jwt.sign({ userId : id, name: name} ,process.env.TOKEN_SECRET);
-}
-
-exports.postLogin=async (req,res,next)=>{
-    try{
-        var email=req.body.email;
-        var password=req.body.password;
-        const user  = await User.findAll({ where : { email }})
-        if(user.length>0){
-            bcrypt.compare(password, user[0].password, (err, result) => {
-                if(err){
-                 throw new Error('Something went wrong')
+        const userExist = await User.findOne({ where: { email } });
+        
+        if (userExist) {
+            bcrypt.compare(loginPassword, userExist.dataValues.password, (err, result) => {
+                if (err) {
+                    throw new Error('Something went wrong');
                 }
-                 if(result === true){
-                     return res.status(200).json({success: true, message: "User logged in successfully", token: generateAccessToken(user[0].id, user[0].name)})
-                 }
-                 else{
-                 return res.status(400).json({success: false, message: 'Password is incorrect'})
+                if (result) {
+                    res.status(200).json({ message: 'User logged in successfully', 
+                    success: true, 
+                    token: generateAccessToken(userExist.dataValues.id, userExist.dataValues.name),
+                    userId:userExist.dataValues.id
+                    })
+                } else {
+                    res.status(401).json({ error: "User not authorized. Wrong password", success: false });
                 }
-             })
-             
+            })
+        } else {
+            res.status(404).json({ error: "User doesnot exist. Try with different email", success: false });
         }
-        else{
-            return res.status(404).json({success: false, message: 'User Doesnot exitst'})
-        }
-    }
-    catch(err){
-        res.status(500).json({
-            error:"User not found"
-        })
+    } catch (err) {
+        res.status(500).json({ error: err, success: false })
     }
 }
